@@ -19,7 +19,33 @@ class App {
 
         this.db = null;
         this.initFirebase();
+        this.checkAuth();
         this.init();
+    }
+
+    checkAuth() {
+        // Session storage to remember login in current tab
+        if (sessionStorage.getItem('isLoggedIn')) {
+            document.getElementById('auth-overlay').classList.add('hidden');
+        }
+    }
+
+    checkPassword() {
+        const passInput = document.getElementById('auth-password');
+        const errorMsg = document.getElementById('auth-error');
+
+        // --- 設定したいパスワードをここに入力してください ---
+        const correctPassword = "Hisako0728";
+
+        if (passInput.value === correctPassword) {
+            sessionStorage.setItem('isLoggedIn', 'true');
+            document.getElementById('auth-overlay').classList.add('hidden');
+            this.showToast('ログインに成功しました。');
+        } else {
+            errorMsg.classList.remove('hidden');
+            passInput.value = "";
+            passInput.focus();
+        }
     }
 
     initFirebase() {
@@ -272,10 +298,10 @@ class App {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                const compressedData = canvas.toDataURL('image/jpeg', 0.7);
+                const compressedData = canvas.toDataURL('image/jpeg', 0.8);
                 this.currentImageData = compressedData;
                 this.showPreview(this.currentImageData);
-                this.mockOCRProcessing();
+                this.performRealOCR(this.currentImageData);
             };
             img.src = e.target.result;
         };
@@ -288,41 +314,69 @@ class App {
         preview.classList.remove('hidden');
     }
 
-    mockOCRProcessing() {
+    async performRealOCR(imageSrc) {
         const overlay = document.getElementById('processing-overlay');
+        const overlayText = overlay.querySelector('p');
         overlay.classList.remove('hidden');
+        overlayText.textContent = 'AIが文字を読み取っています（10秒ほどかかります）...';
 
-        // Mock AI thinking time
-        setTimeout(() => {
+        try {
+            // Tesseract.js usage
+            const worker = await Tesseract.createWorker('jpn');
+            const ret = await worker.recognize(imageSrc);
+            const text = ret.data.text;
+            console.log("OCR Result:", text);
+
+            await worker.terminate();
+
+            this.processOCRText(text);
+            this.showToast('読み取りが完了しました！内容に不備がないか確認してください。');
+        } catch (e) {
+            console.error("OCR Error:", e);
+            this.showToast('読み取りに失敗しました。手動で入力してください。', 'error');
+        } finally {
             overlay.classList.add('hidden');
-            this.fillMockOCRData();
-            this.showToast('レシートの読み取りが完了しました。内容を確認してください。');
-        }, 1500);
+        }
     }
 
-    fillMockOCRData() {
-        // Mock data logic (randomize slightly to look real)
+    processOCRText(text) {
         const dateInput = document.getElementById('t-date');
         const catInput = document.getElementById('t-category');
         const amountInput = document.getElementById('t-amount');
         const memoInput = document.getElementById('t-memo');
         const hintTime = document.getElementById('hint-datetime');
 
-        // Randomize mock outcome
-        const types = [
-            { cat: '車両費', amount: 5500, memo: 'エネオス ガソリン代' },
-            { cat: '消耗品費', amount: 1280, memo: 'ホームセンター 事務用品' },
-            { cat: '接待交際費', amount: 3500, memo: 'カフェ 打ち合わせ' }
-        ];
-        const randomType = types[Math.floor(Math.random() * types.length)];
+        // 1. Extract Amount (Search for Yen symbol or numbers near "合計" or "税込")
+        // Simple regex to find numbers that look like prices
+        const amountMatch = text.replace(/,/g, '').match(/合計\s*(\d+)円?|金額\s*(\d+)円?|(\d+)\s*円/);
+        if (amountMatch) {
+            amountInput.value = amountMatch[1] || amountMatch[2] || amountMatch[3];
+        } else {
+            // Fallback: look for the largest number found in the text (often the total)
+            const numbers = text.replace(/,/g, '').match(/\d{3,}/g);
+            if (numbers) {
+                const maxNum = Math.max(...numbers.map(n => parseInt(n)));
+                if (maxNum < 1000000) amountInput.value = maxNum; // cap to avoid phone numbers etc
+            }
+        }
 
-        // Set to today
-        const today = new Date().toISOString().split('T')[0];
+        // 2. Extract Date (YYYY/MM/DD or YY/MM/DD)
+        const dateMatch = text.match(/20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}/) || text.match(/\d{2}[-/月]\d{1,2}[-/日]/);
+        if (dateMatch) {
+            let d = dateMatch[0].replace(/[年月]/g, '-').replace(/日/g, '');
+            if (d.length < 10) d = `2026-${d}`; // handle 2026-02-26 style
+            dateInput.value = d;
+        } else {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
 
-        dateInput.value = today;
-        catInput.value = randomType.cat;
-        amountInput.value = randomType.amount;
-        memoInput.value = randomType.memo;
+        // 3. Category Heuristic
+        if (text.includes('ENEOS') || text.includes('ガソリン') || text.includes('給油')) {
+            catInput.value = '旅費交通費';
+            memoInput.value = 'エネオス ガソリン代';
+        } else if (text.includes('コンビニ') || text.includes('セブン') || text.includes('ローソン')) {
+            catInput.value = '消耗品費';
+        }
 
         hintTime.textContent = `撮影日時: ${this.currentImageDate}`;
     }

@@ -17,10 +17,37 @@
     <!-- Firebase (Firestore Sync) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Tesseract.js for OCR -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
+    <!-- Password Overlay -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card">
+            <div class="logo" style="justify-content: center; margin-bottom: 1rem;">
+                <i class="ph ph-drop text-primary"></i>
+                <span>MILK KEEP</span>
+            </div>
+            <h3>パスワードを入力</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                このアプリはパスワードで保護されています。
+            </p>
+            <div class="form-group" style="text-align: left;">
+                <input type="password" id="auth-password" placeholder="パスワード"
+                    onkeydown="if(event.key==='Enter') window.app.checkPassword()">
+            </div>
+            <button class="btn btn-primary" style="width: 100%; justify-content: center;"
+                onclick="window.app.checkPassword()">
+                ログイン
+            </button>
+            <p id="auth-error" class="text-danger hidden" style="font-size: 0.85rem; margin-top: 1rem;">
+                パスワードが正しくありません。
+            </p>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar">
@@ -95,9 +122,6 @@
                             </div>
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="window.app.navigateTo('receipts')">
-                        <i class="ph ph-plus"></i> 新規登録
-                    </button>
                 </div>
             </header>
 
