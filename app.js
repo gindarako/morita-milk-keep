@@ -6,6 +6,7 @@ class App {
         this.currentImageData = null;
         this.currentImageDate = null;
         this.hasSeenNotifs = false;
+        this.currentEditingId = null;
 
         const now = new Date();
         this.currentCalYear = now.getFullYear();
@@ -411,6 +412,34 @@ class App {
         document.getElementById('hint-datetime').textContent = '';
         this.currentImageData = null;
         this.currentImageDate = null;
+        this.currentEditingId = null;
+
+        const submitBtn = document.querySelector('#transaction-form button[type="submit"]');
+        if (submitBtn) submitBtn.innerHTML = '<i class="ph ph-check"></i> 登録する';
+    }
+
+    editTransaction(id) {
+        const tx = this.transactions.find(t => t.id === id);
+        if (!tx) return;
+
+        this.navigate('receipts');
+        this.currentEditingId = id;
+
+        document.getElementById('t-date').value = tx.date;
+        document.getElementById('t-category').value = tx.category;
+        document.getElementById('t-amount').value = tx.amount;
+        document.getElementById('t-memo').value = tx.memo;
+
+        if (tx.image) {
+            const preview = document.getElementById('preview-image');
+            preview.src = tx.image;
+            preview.classList.remove('hidden');
+        }
+
+        const submitBtn = document.querySelector('#transaction-form button[type="submit"]');
+        if (submitBtn) submitBtn.innerHTML = '<i class="ph ph-arrow-clockwise"></i> 更新する';
+
+        this.showToast('取引の編集モードです。内容を修正して更新してください。');
     }
 
     setupForm() {
@@ -424,26 +453,43 @@ class App {
 
             if (!date || !category || !amount) return;
 
-            const newTx = {
-                id: Date.now(),
-                date,
-                category,
-                amount,
-                memo,
-                type: category.includes('売上') ? 'income' : 'expense',
-                image: this.currentImageData,
-                imageDate: this.currentImageDate
-            };
+            if (this.currentEditingId) {
+                // Update existing
+                const index = this.transactions.findIndex(t => t.id === this.currentEditingId);
+                if (index !== -1) {
+                    this.transactions[index].date = date;
+                    this.transactions[index].category = category;
+                    this.transactions[index].amount = amount;
+                    this.transactions[index].memo = memo;
+                    this.transactions[index].type = category.includes('売上') ? 'income' : 'expense';
+                    if (this.currentImageData) {
+                        this.transactions[index].image = this.currentImageData;
+                    }
+                }
+                this.showToast('取引を更新しました。');
+            } else {
+                // Create new
+                const newTx = {
+                    id: Date.now(),
+                    date,
+                    category,
+                    amount,
+                    memo,
+                    type: category.includes('売上') ? 'income' : 'expense',
+                    image: this.currentImageData,
+                    imageDate: this.currentImageDate
+                };
 
-            this.transactions.unshift(newTx);
-            if (newTx.image) {
-                this.receipts.unshift(newTx);
-                this.downloadReceiptLocally(newTx);
+                this.transactions.unshift(newTx);
+                if (newTx.image) {
+                    this.downloadReceiptLocally(newTx);
+                }
+                this.showToast('取引を登録し、レシート画像を保存しました。');
             }
 
+            this.receipts = this.transactions.filter(t => t.image);
             this.saveData();
             this.updateUI();
-            this.showToast('取引を登録し、レシート画像を保存しました。');
             this.resetForm();
             this.navigate('transactions');
         });
@@ -807,10 +853,13 @@ class App {
                             <span class="t-date">${tx.date}</span>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
                         <span class="t-amount ${tx.type}">
                             ${isIncome ? '+' : '-'}¥${tx.amount.toLocaleString()}
                         </span>
+                        <button class="icon-btn tooltip text-muted" onclick="window.app.editTransaction(${tx.id})" title="編集">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
                         <button class="icon-btn tooltip text-muted" onclick="window.app.deleteTransaction(${tx.id})" title="削除">
                             <i class="ph ph-trash"></i>
                         </button>
@@ -838,9 +887,14 @@ class App {
                     <td class="text-danger fw-bold">${expenseStr}</td>
                     <td>${hasImage}</td>
                     <td>
-                        <button class="btn btn-outline" style="padding: 4px 8px; color: var(--danger); border-color: var(--danger);" onclick="window.app.deleteTransaction(${tx.id})">
-                            <i class="ph ph-trash"></i> 削除
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-outline" style="padding: 4px 8px; color: var(--primary); border-color: var(--primary);" onclick="window.app.editTransaction(${tx.id})">
+                                <i class="ph ph-pencil-simple"></i> 編集
+                            </button>
+                            <button class="btn btn-outline" style="padding: 4px 8px; color: var(--danger); border-color: var(--danger);" onclick="window.app.deleteTransaction(${tx.id})">
+                                <i class="ph ph-trash"></i> 削除
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
