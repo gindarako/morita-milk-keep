@@ -64,6 +64,51 @@ body {
     display: none !important;
 }
 
+.mb-lg {
+    margin-bottom: 2rem;
+}
+
+.mt-md {
+    margin-top: 1rem;
+}
+
+.p-md {
+    padding: 1rem;
+}
+
+.bg-light {
+    background-color: var(--bg-color);
+}
+
+.radius-md {
+    border-radius: var(--radius-md);
+}
+
+.manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.manager-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--surface-color);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    font-size: 0.9rem;
+}
+
+.dashboard-widgets-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
 .mt-lg {
     margin-top: 2rem;
 }
@@ -458,41 +503,45 @@ h4 {
 }
 
 .calendar-wrapper {
-    background: var(--bg-color);
+    background: var(--surface-color);
+    /* Match widget color or stay slightly muted */
     border-radius: var(--radius-lg);
-    padding: 1rem;
+    padding: 0.5rem;
     border: 1px solid var(--border-color);
+    max-width: 480px;
+    margin: 0 auto;
 }
 
 .calendar-header-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    gap: 2px;
 }
 
 .calendar-day {
-    aspect-ratio: 1;
-    background: var(--surface-color);
-    border-radius: var(--radius-md);
+    aspect-ratio: 1.1;
+    background: var(--bg-color);
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
-    padding-top: 4px;
-    font-size: 0.85rem;
+    justify-content: center;
+    padding: 4px 0;
+    font-size: 0.8rem;
     font-weight: 500;
     cursor: pointer;
     border: 1px solid transparent;
+    transition: all 0.2s;
 }
 
 .calendar-day.empty {

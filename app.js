@@ -13,6 +13,10 @@ class App {
 
         this.dirHandle = null;
 
+        // Customization
+        this.quickEntries = ['ガソリン代', '仕入高 (牛乳)', '消耗品費', '車両費'];
+        this.customCategories = [];
+
         // --- Firebase Initial Site-Wide ID ---
         const urlParams = new URLSearchParams(window.location.search);
         this.storeId = urlParams.get('id') || 'morita_milk';
@@ -24,8 +28,8 @@ class App {
     }
 
     checkAuth() {
-        // Session storage to remember login in current tab
-        if (sessionStorage.getItem('isLoggedIn')) {
+        // Local storage to remember login even after closing browser
+        if (localStorage.getItem('isLoggedIn')) {
             document.getElementById('auth-overlay').classList.add('hidden');
         }
     }
@@ -38,7 +42,7 @@ class App {
         const correctPassword = "Hisako0728";
 
         if (passInput.value === correctPassword) {
-            sessionStorage.setItem('isLoggedIn', 'true');
+            localStorage.setItem('isLoggedIn', 'true');
             document.getElementById('auth-overlay').classList.add('hidden');
             this.showToast('ログインに成功しました。');
         } else {
@@ -88,6 +92,8 @@ class App {
                 this.transactions = parsed.transactions || [];
                 this.receipts = this.transactions.filter(t => t.image);
                 this.hasSeenNotifs = !!parsed.hasSeenNotifs;
+                this.quickEntries = parsed.quickEntries || this.quickEntries;
+                this.customCategories = parsed.customCategories || this.customCategories;
                 this.updateUI();
             } catch (e) {
                 console.error('Local Load Error:', e);
@@ -109,6 +115,8 @@ class App {
                     this.transactions = remoteData.transactions;
                     this.receipts = this.transactions.filter(t => t.image);
                     this.hasSeenNotifs = !!remoteData.hasSeenNotifs;
+                    this.quickEntries = remoteData.quickEntries || this.quickEntries;
+                    this.customCategories = remoteData.customCategories || this.customCategories;
 
                     // Save to local for offline use
                     this.saveData(true); // pass true to skip infinite loop if exists
@@ -125,7 +133,9 @@ class App {
         try {
             localStorage.setItem('milkKeepData', JSON.stringify({
                 transactions: this.transactions,
-                hasSeenNotifs: this.hasSeenNotifs
+                hasSeenNotifs: this.hasSeenNotifs,
+                quickEntries: this.quickEntries,
+                customCategories: this.customCategories
             }));
         } catch (e) {
             console.error("Local Save Error:", e);
@@ -138,6 +148,8 @@ class App {
                 await this.db.collection('stores').doc(this.storeId).set({
                     transactions: this.transactions,
                     hasSeenNotifs: this.hasSeenNotifs,
+                    quickEntries: this.quickEntries,
+                    customCategories: this.customCategories,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
                 console.log("Remote Save Success: " + this.storeId);
@@ -507,6 +519,136 @@ class App {
         this.renderCharts();
         this.renderReportPreview();
         this.renderNotifs();
+        this.renderQuickEntries();
+        this.renderCategories();
+    }
+
+    // --- Customization Logic ---
+    renderQuickEntries() {
+        const grid = document.getElementById('quick-action-grid');
+        const list = document.getElementById('quick-entry-list');
+        if (!grid) return;
+
+        // Icons map
+        const icons = {
+            'ガソリン代': 'ph-gas-pump',
+            '仕入高 (牛乳)': 'ph-package',
+            '消耗品費': 'ph-shopping-cart',
+            '車両費': 'ph-car'
+        };
+
+        grid.innerHTML = '';
+        list.innerHTML = '';
+
+        this.quickEntries.forEach(entry => {
+            const icon = icons[entry] || 'ph-tag';
+            // Grid buttons
+            grid.innerHTML += `
+                <button class="quick-btn" onclick="window.app.fillQuickEntry('${entry}')">
+                    <i class="ph ${icon}"></i>
+                    <span>${entry}</span>
+                </button>
+            `;
+            // Manager items
+            list.innerHTML += `
+                <div class="manager-item">
+                    <span>${entry}</span>
+                    <button class="icon-btn text-danger" onclick="window.app.removeQuickEntry('${entry}')">
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+            `;
+        });
+    }
+
+    toggleQuickEntryManager() {
+        const mgr = document.getElementById('quick-entry-manager');
+        mgr.classList.toggle('hidden');
+    }
+
+    addQuickEntry() {
+        const input = document.getElementById('new-quick-name');
+        const name = input.value.trim();
+        if (!name) return;
+        if (this.quickEntries.includes(name)) {
+            this.showToast('既に追加されています。', 'error');
+            return;
+        }
+        this.quickEntries.push(name);
+        input.value = '';
+        this.saveData();
+        this.renderQuickEntries();
+        this.showToast('ボタンを追加しました。');
+    }
+
+    removeQuickEntry(name) {
+        this.quickEntries = this.quickEntries.filter(e => e !== name);
+        this.saveData();
+        this.renderQuickEntries();
+    }
+
+    renderCategories() {
+        const optgroup = document.getElementById('expense-optgroup');
+        const list = document.getElementById('custom-category-list');
+        if (!optgroup) return;
+
+        // 1. Update Dropdown
+        const defaults = ['仕入高', '旅費交通費', '車両費', '消耗品費', '通信費', '接待交際費'];
+        let html = '';
+        defaults.forEach(cat => {
+            html += `<option value="${cat}">${cat}</option>`;
+        });
+        this.customCategories.forEach(cat => {
+            html += `<option value="${cat}">${cat} (カスタム)</option>`;
+        });
+        optgroup.innerHTML = html;
+
+        // 2. Update Manager List
+        if (list) {
+            list.innerHTML = '';
+            this.customCategories.forEach(cat => {
+                list.innerHTML += `
+                    <div class="manager-item">
+                        <span>${cat}</span>
+                        <button type="button" class="icon-btn text-danger" onclick="window.app.removeCustomCategory('${cat}')">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            if (this.customCategories.length === 0) {
+                list.innerHTML = '<p style="font-size: 0.8rem; color: var(--text-muted); padding: 8px;">カスタム項目はありません。</p>';
+            }
+        }
+    }
+
+    toggleCategoryManager() {
+        const mgr = document.getElementById('category-manager');
+        if (mgr) mgr.classList.toggle('hidden');
+    }
+
+    removeCustomCategory(name) {
+        if (confirm(`「${name}」を削除してもよろしいですか？`)) {
+            this.customCategories = this.customCategories.filter(c => c !== name);
+            this.saveData();
+            this.renderCategories();
+            this.showToast('項目を削除しました。');
+        }
+    }
+
+    addNewCategoryPrompt() {
+        const name = prompt('追加したい勘定項目名を入力してください:');
+        if (name && name.trim()) {
+            const trimmed = name.trim();
+            if (this.customCategories.includes(trimmed)) {
+                alert('その項目は既に存在します。');
+                return;
+            }
+            this.customCategories.push(trimmed);
+            this.saveData();
+            this.renderCategories();
+            this.showToast('勘定項目を追加しました。');
+        }
     }
 
     renderReportPreview() {
