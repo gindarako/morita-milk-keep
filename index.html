@@ -4,41 +4,509 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VTuberロゴジェネレーター by Nano Banana</title>
+    <title>MILK KEEP - 牛乳配達特化型 青色申告ソフト</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- External Libraries -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase (Firestore Sync) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- Google Cloud Vision API (via fetch, no SDK needed) -->
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800&display=swap" rel="stylesheet">
 </head>
 
 <body>
-    <div class="container">
-        <h1>✨ VTuberロゴメーカー ✨</h1>
-        <p class="subtitle">Nano Banana (Gemini 2.5 Flash Image) API を使用</p>
-
-        <div class="form-group">
-            <label for="apiKey">Nano Banana API Key</label>
-            <input type="password" id="apiKey" placeholder="APIキーを入力してください">
-        </div>
-
-        <div class="form-group">
-            <label for="charName">キャラクター名</label>
-            <input type="text" id="charName" placeholder="例: 天使白羽">
-        </div>
-
-        <div class="form-group">
-            <label for="theme">モチーフ・雰囲気</label>
-            <input type="text" id="theme" placeholder="例: 雲、海、雪、いちご、魔法">
-        </div>
-
-        <button id="generateBtn">ロゴを生成する</button>
-
-        <div class="result-area">
-            <div id="loading" class="hidden">
-                <div class="spinner"></div>
-                <p>生成中...🍌</p>
+    <!-- Password Overlay -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card">
+            <div class="logo" style="justify-content: center; margin-bottom: 1rem;">
+                <i class="ph ph-drop text-primary"></i>
+                <span>MILK KEEP</span>
             </div>
-            <img id="resultImage" class="hidden" alt="生成されたロゴ">
-            <div id="errorMsg" class="hidden"></div>
+            <h3>パスワードを入力</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                このアプリはパスワードで保護されています。
+            </p>
+            <div class="form-group" style="text-align: left;">
+                <input type="password" id="auth-password" placeholder="パスワード"
+                    onkeydown="if(event.key==='Enter') window.app.checkPassword()">
+            </div>
+            <button class="btn btn-primary" style="width: 100%; justify-content: center;"
+                onclick="window.app.checkPassword()">
+                ログイン
+            </button>
+            <p id="auth-error" class="text-danger hidden" style="font-size: 0.85rem; margin-top: 1rem;">
+                パスワードが正しくありません。
+            </p>
         </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="ph ph-drop text-primary"></i>
+                <span>MILK KEEP</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-target="dashboard">
+                    <i class="ph ph-squares-four"></i> ホーム
+                </a>
+                <a href="#" class="nav-item" data-target="receipts">
+                    <i class="ph ph-receipt"></i> レシート登録
+                </a>
+                <a href="#" class="nav-item" data-target="transactions">
+                    <i class="ph ph-list-dashes"></i> 取引一覧
+                </a>
+                <a href="#" class="nav-item" data-target="analytics">
+                    <i class="ph ph-chart-pie-slice"></i> レポート
+                </a>
+                <a href="#" class="nav-item" data-target="reports">
+                    <i class="ph ph-file-text"></i> 決算・申告
+                </a>
+            </nav>
+            <div class="user-profile">
+                <div class="avatar">
+                    <img src="https://ui-avatars.com/api/?name=M&background=E2EEFE&color=2563EB" alt="User">
+                </div>
+                <div class="user-info">
+                    <span class="user-name">森田牛乳店</span>
+                    <span class="user-role">牛乳配達 個人事業主</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <h1 id="page-title">ホーム</h1>
+                <div class="header-actions">
+                    <div style="position: relative;">
+                        <button class="icon-btn tooltip"
+                            onclick="document.getElementById('notif-dropdown').classList.toggle('hidden')">
+                            <i class="ph ph-bell"></i>
+                            <span class="badge" id="notif-badge">2</span>
+                        </button>
+                        <!-- Notif Dropdown -->
+                        <div id="notif-dropdown" class="notif-dropdown hidden">
+                            <div class="notif-header">
+                                <h4>通知 (<span id="notif-count">2</span>)</h4>
+                            </div>
+                            <ul class="notif-list" id="notif-list">
+                                <!-- JS will populate or we can mock here -->
+                                <li>
+                                    <i class="ph ph-receipt text-primary"></i>
+                                    <div>
+                                        <p>未登録のレシートが2件あります。</p>
+                                        <span class="notif-time">2時間前</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <i class="ph ph-info text-primary"></i>
+                                    <div>
+                                        <p>青色申告の準備はお早めに！決算・申告メニューからプレビューを確認できます。</p>
+                                        <span class="notif-time">1日前</span>
+                                    </div>
+                                </li>
+                            </ul>
+                            <div class="notif-footer" onclick="window.app.clearNotifs()">
+                                <span>すべて既読にする</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <section id="dashboard" class="view active">
+                <!-- 1. Calendar (Moved to Top) -->
+                <div class="widget mb-lg">
+                    <div class="widget-header">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button class="icon-btn" onclick="window.app.changeMonth(-1)"><i
+                                    class="ph ph-caret-left"></i></button>
+                            <h3 id="calendar-month">2026年 2月</h3>
+                            <button class="icon-btn" onclick="window.app.changeMonth(1)"><i
+                                    class="ph ph-caret-right"></i></button>
+                        </div>
+                        <div class="calendar-legend">
+                            <span class="cal-dot income"></span> 売上
+                            <span class="cal-dot expense"></span> 経費
+                        </div>
+                    </div>
+                    <div class="calendar-wrapper">
+                        <div class="calendar-header-row">
+                            <div>日</div>
+                            <div>月</div>
+                            <div>火</div>
+                            <div>水</div>
+                            <div>木</div>
+                            <div>金</div>
+                            <div>土</div>
+                        </div>
+                        <div class="calendar-grid" id="calendar-grid"></div>
+                    </div>
+                </div>
+
+                <!-- 2. KPI Grid (Moved below calendar) -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-blue-light text-primary">
+                            <i class="ph ph-wallet"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <span class="kpi-label">今月の売上 (牛乳代)</span>
+                            <span class="kpi-value" id="kpi-income">¥0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-red-light text-danger">
+                            <i class="ph ph-gas-pump"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <span class="kpi-label">今月の経費 (全体)</span>
+                            <span class="kpi-value" id="kpi-expense">¥0</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-green-light text-success">
+                            <i class="ph ph-trend-up"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <span class="kpi-label">今月の利益</span>
+                            <span class="kpi-value" id="kpi-profit">¥0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-widgets-vertical">
+                    <!-- 3. Quick Actions (Customizable) -->
+                    <div class="widget">
+                        <div class="widget-header">
+                            <h3>よく使う勘定項目</h3>
+                            <button class="btn btn-outline" style="padding: 4px 8px; font-size: 0.8rem;"
+                                onclick="window.app.toggleQuickEntryManager()">
+                                <i class="ph ph-pencil-simple"></i> 編集
+                            </button>
+                        </div>
+                        <div class="quick-action-grid" id="quick-action-grid">
+                            <!-- JS will populate -->
+                        </div>
+
+                        <!-- Quick Entry Manager (Hidden by default) -->
+                        <div id="quick-entry-manager" class="hidden mt-md p-md bg-light radius-md">
+                            <h4 style="margin-bottom: 8px;">ボタンの追加/削除</h4>
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                <input type="text" id="new-quick-name" placeholder="ボタン名 (例: 給油)">
+                                <button class="btn btn-primary" onclick="window.app.addQuickEntry()">追加</button>
+                            </div>
+                            <div id="quick-entry-list" class="manager-list">
+                                <!-- JS items -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Recent Transactions (Moved above backup) -->
+                    <div class="widget recent-transactions">
+                        <div class="widget-header">
+                            <h3>最近の取引</h3>
+                            <a href="#" onclick="window.app.navigateTo('transactions')" class="text-link">すべて見る</a>
+                        </div>
+                        <ul class="transaction-list" id="home-recent-list">
+                            <!-- JS will populate -->
+                        </ul>
+                    </div>
+
+                    <!-- 5. Backup (Moved to Bottom) -->
+                    <div class="widget">
+                        <div class="widget-header">
+                            <h3><i class="ph ph-database"></i> データ引き継ぎ・バックアップ</h3>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                            スマホや別のPCにデータを移す場合は、ここでデータを保存（出力）し、移動先で読み込んでください。
+                        </p>
+                        <div style="display: flex; gap: 1rem; flex-direction: column;">
+                            <button class="btn btn-outline" onclick="window.app.exportBackup()">
+                                <i class="ph ph-download"></i> 今のデータを保存 (バックアップ)
+                            </button>
+                            <label class="btn btn-primary" style="text-align: center;">
+                                <i class="ph ph-upload"></i> データを復元 (引き継ぎ)
+                                <input type="file" class="hidden" accept=".json"
+                                    onchange="window.app.importBackup(event)">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Receipts / OCR View -->
+            <section id="receipts" class="view">
+                <div class="receipt-layout">
+                    <!-- Upload Area -->
+                    <div class="upload-section">
+                        <h2><i class="ph ph-camera"></i> レシートを撮影・アップロード</h2>
+                        <p class="section-desc">写真から日付、金額、勘定科目をAIが自動で読み取ります。</p>
+
+
+
+                        <div
+                            style="margin-bottom: 1.5rem; background: var(--bg-color); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="font-size: 0.95rem; margin-bottom: 4px;"><i class="ph ph-folder"></i>
+                                    画像の自動仕分け保存</h4>
+                                <p style="font-size: 0.8rem; color: var(--text-muted);" id="save-dir-status">未設定
+                                    (毎回ダウンロードされます)</p>
+                            </div>
+                            <button class="btn btn-outline" onclick="window.app.selectSaveDirectory()"><i
+                                    class="ph ph-folder-open"></i> 保存先フォルダを選ぶ</button>
+                        </div>
+
+                        <div class="drop-zone" id="drop-zone">
+                            <div class="drop-zone-content">
+                                <i class="ph ph-upload-simple drop-icon"></i>
+                                <h3>ここに写真をドロップ</h3>
+                                <p>または</p>
+                                <label class="btn btn-outline">
+                                    ファイルを選択
+                                    <input type="file" id="file-input" accept="image/*" class="hidden">
+                                </label>
+                                <p class="hint">対応形式: JPG, PNG, HEIC</p>
+                            </div>
+                            <img id="preview-image" src="" alt="プレビュー" class="hidden">
+                        </div>
+
+                        <!-- Processing State -->
+                        <div class="processing-overlay hidden" id="processing-overlay">
+                            <div class="spinner"></div>
+                            <p>AIが文字を読み取っています...</p>
+                        </div>
+                    </div>
+
+                    <!-- OCR Results Form -->
+                    <div class="ocr-form-section">
+                        <h2>読み取り結果と登録</h2>
+                        <form id="transaction-form" class="transaction-form">
+                            <div class="form-group">
+                                <label>取引日 <span class="required">*</span></label>
+                                <input type="date" id="t-date" required>
+                                <span class="form-hint" id="hint-datetime"></span>
+                            </div>
+                            <div class="form-group">
+                                <label style="display: flex; justify-content: space-between;">
+                                    <span>勘定科目 <span class="required">*</span></span>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button type="button" class="text-link"
+                                            style="background:none; border:none; padding:0; cursor:pointer;"
+                                            onclick="window.app.addNewCategoryPrompt()">+ 追加</button>
+                                        <button type="button" class="text-link"
+                                            style="background:none; border:none; padding:0; cursor:pointer; color: var(--text-muted);"
+                                            onclick="window.app.toggleCategoryManager()">編集</button>
+                                    </div>
+                                </label>
+                                <select id="t-category" required>
+                                    <option value="">選択してください</option>
+                                    <optgroup label="売上">
+                                        <option value="売上高">売上高 (牛乳代など)</option>
+                                    </optgroup>
+                                    <optgroup label="経費" id="expense-optgroup">
+                                        <option value="仕入高">仕入高 (商品の仕入)</option>
+                                        <option value="旅費交通費">旅費交通費 (ガソリン代, 電車, バス)</option>
+                                        <option value="車両費">車両費 (車検, 修理, オイル交換)</option>
+                                        <option value="消耗品費">消耗品費 (文具, 日用品, 少額備品)</option>
+                                        <option value="通信費">通信費 (スマホ代, インターネット)</option>
+                                        <option value="接待交際費">接待交際費 (取引先との飲食等)</option>
+                                        <!-- Custom categories will be injected here -->
+                                    </optgroup>
+                                </select>
+                                <!-- Category Manager (Hidden by default) -->
+                                <div id="category-manager" class="hidden mt-md p-md bg-light radius-md">
+                                    <h4 style="margin-bottom: 8px; font-size: 0.9rem;">カスタム項目の削除</h4>
+                                    <div id="custom-category-list" class="manager-list">
+                                        <!-- JS items -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>金額 (税込) <span class="required">*</span></label>
+                                <div class="input-with-prefix">
+                                    <span class="prefix">¥</span>
+                                    <input type="number" id="t-amount" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>摘要 (メモ)</label>
+                                <input type="text" id="t-memo" placeholder="例: エネオス ガソリン代">
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-outline"
+                                    onclick="window.app.resetForm()">リセット</button>
+                                <button type="submit" class="btn btn-primary">この内容で登録する</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Receipt History Gallery -->
+                <div class="receipt-gallery widget mt-lg">
+                    <div class="widget-header">
+                        <h3>アップロードした領収書・レシート</h3>
+                    </div>
+                    <div class="gallery-grid" id="receipt-gallery-grid">
+                        <!-- JS will populate -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transactions View -->
+            <section id="transactions" class="view">
+                <div class="table-container widget">
+                    <div class="table-header">
+                        <div class="search-box">
+                            <i class="ph ph-magnifying-glass"></i>
+                            <input type="text" placeholder="取引を検索...">
+                        </div>
+                        <div class="filter-actions">
+                            <button class="btn btn-outline"><i class="ph ph-funnel"></i> 絞り込み</button>
+                            <button class="btn btn-outline" onclick="window.app.exportCSV()"><i
+                                    class="ph ph-download-simple"></i> CSV出力 (Excel用)</button>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>取引日</th>
+                                <th>勘定科目</th>
+                                <th>摘要</th>
+                                <th>収入</th>
+                                <th>支出</th>
+                                <th>レシート</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-tbody">
+                            <!-- JS will populate -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Analytics / Reports View -->
+            <section id="analytics" class="view">
+                <div class="report-header">
+                    <h2>今期のレポート・概要</h2>
+                    <p>月ごとの推移や経費の内訳グラフです。</p>
+                </div>
+
+                <div class="dashboard-widgets">
+                    <!-- Pie Chart: Expenses by Category -->
+                    <div class="widget">
+                        <h3>経費の内訳 (今期累計)</h3>
+                        <div
+                            style="position: relative; height: 300px; width: 100%; display: flex; justify-content: center; margin-top: 1rem;">
+                            <canvas id="expensePieChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Bar Chart: Expected Monthly Trend -->
+                    <div class="widget">
+                        <h3>月別 収支推移</h3>
+                        <div style="position: relative; height: 300px; width: 100%; margin-top: 1rem;">
+                            <canvas id="monthlyBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reports View (Printable) -->
+            <section id="reports" class="view">
+                <div class="report-header">
+                    <h2>青色申告決算書 プレビュー</h2>
+                    <p>日々の入力から自動で決算書が作成されます。</p>
+                    <div
+                        style="background: var(--warning); color: #fff; padding: 1rem; border-radius: var(--radius-md); margin-top: 1rem; margin-bottom: 2rem;">
+                        <p style="font-weight: 600; font-size: 0.95rem; margin-bottom: 4px;"><i
+                                class="ph ph-warning-circle"></i> 【重要】確定申告の提出について</p>
+                        <p style="font-size: 0.85rem;">
+                            本ツールの「.xtx」出力はテスト段階の参考機能であり、そのままe-Taxや国税庁のシステムに直接読み込ませることはできません（正式なソフトウェア認定が必要なため）。<br>
+                            確定申告の際は、<strong>こちらの画面に表示された「売上」や「各経費」の合計金額（計算結果）を、国税庁の「確定申告書等作成コーナー」のウェブサイトで直接入力（転記）する形</strong>でご活用いただくのが最も確実です。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="document-preview">
+                    <div class="doc-page">
+                        <div class="doc-title">令和6年分 青色申告決算書（一般用）</div>
+                        <table class="doc-table">
+                            <tr>
+                                <th colspan="2" class="text-left">損益計算書</th>
+                            </tr>
+                            <tr>
+                                <td>売上（収入）金額</td>
+                                <td class="text-right" id="rep-sales">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>仕入金額</td>
+                                <td class="text-right" id="rep-purchases">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>差引金額（売上総利益）</td>
+                                <td class="text-right fw-bold" id="rep-gross">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>租税公課</td>
+                                <td class="text-right" id="rep-tax">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>旅費交通費（ガソリン・電車など）</td>
+                                <td class="text-right" id="rep-transport">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>通信費</td>
+                                <td class="text-right" id="rep-communication">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>接待交際費</td>
+                                <td class="text-right" id="rep-entertainment">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>消耗品費</td>
+                                <td class="text-right" id="rep-supplies">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>車両費</td>
+                                <td class="text-right" id="rep-vehicle">¥0</td>
+                            </tr>
+                            <tr style="border-top: 2px solid #000;">
+                                <td>小計 (経費合計)</td>
+                                <td class="text-right fw-bold" id="rep-total-expenses">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>差引金額（所得金額）</td>
+                                <td class="text-right fw-bold text-primary" id="rep-net-income">¥0</td>
+                            </tr>
+                            <tr>
+                                <td>青色申告特別控除額</td>
+                                <td class="text-right fw-bold text-primary">¥650,000</td>
+                            </tr>
+                        </table>
+                        <div class="tax-badge">65万円控除 適用対象</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">
+        <i class="ph ph-check-circle text-success"></i>
+        <span id="toast-message">メッセージ</span>
     </div>
 
     <script src="app.js"></script>
