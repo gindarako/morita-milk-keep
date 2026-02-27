@@ -143,6 +143,7 @@ h4 {
     transition: all 0.2s ease;
     border: none;
     outline: none;
+    white-space: nowrap;
 }
 
 .btn-primary {
@@ -916,7 +917,14 @@ select:focus {
 .table-header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 1rem;
+}
+
+.filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .search-box {

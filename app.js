@@ -993,8 +993,28 @@ class App {
         const tbody = document.getElementById('transactions-tbody');
         tbody.innerHTML = '';
 
-        this.transactions.forEach(tx => {
-            const hasImage = tx.image ? `<img src="${tx.image}" class="thumb" alt="レシート">` : '<span style="color:#CBD5E1;">-</span>';
+        const searchInput = document.getElementById('tx-search-input');
+        const searchKeyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
+        const filterSelect = document.getElementById('tx-filter-select');
+        const filterValue = filterSelect ? filterSelect.value : 'all';
+
+        let filteredTxs = this.transactions;
+
+        if (filterValue !== 'all') {
+            filteredTxs = filteredTxs.filter(t => t.type === filterValue);
+        }
+
+        if (searchKeyword) {
+            filteredTxs = filteredTxs.filter(t => 
+                (t.category && t.category.toLowerCase().includes(searchKeyword)) ||
+                (t.memo && t.memo.toLowerCase().includes(searchKeyword)) ||
+                (t.date && t.date.includes(searchKeyword)) ||
+                (t.amount && t.amount.toString().includes(searchKeyword))
+            );
+        }
+
+        filteredTxs.forEach(tx => {
+            const hasImage = tx.image ? `<img src="${tx.image}" class="thumb" alt="レシート" style="cursor: pointer;" onclick="window.app.showImage('${tx.image}')">` : '<span style="color:#CBD5E1;">-</span>';
             const incomeStr = tx.type === 'income' ? `¥${tx.amount.toLocaleString()}` : '-';
             const expenseStr = tx.type === 'expense' ? `¥${tx.amount.toLocaleString()}` : '-';
 
@@ -1141,8 +1161,79 @@ class App {
         this.updateUI();
     }
 
+    showImage(src) {
+        if (!src) return;
+        const imgEl = document.getElementById('fullscreen-img');
+        if (imgEl) {
+            imgEl.src = src;
+            document.getElementById('image-overlay').classList.remove('hidden');
+        }
+    }
+
     // --- Backup & Restore ---
-    exportBackup() {
+    async exportBackup() {
+        try {
+            // First, ask user for the destination directory
+            const dirHandle = await window.showDirectoryPicker({
+                mode: 'readwrite'
+            });
+
+            // Prepare the JSON backup data
+            const dataStr = JSON.stringify({ transactions: this.transactions });
+            const blob = new Blob([dataStr], { type: 'application/json' });
+
+            const now = new Date();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const jsonFileName = `milk_keep_backup_${now.getFullYear()}${mm}${dd}.json`;
+
+            // Save JSON file in the root of the picked directory
+            const jsonHandle = await dirHandle.getFileHandle(jsonFileName, { create: true });
+            const jsonWritable = await jsonHandle.createWritable();
+            await jsonWritable.write(blob);
+            await jsonWritable.close();
+
+            // Export images structured by YYYY年MM月 folders
+            for (const rcpt of this.receipts) {
+                if (!rcpt.image) continue;
+                
+                // rcpt.date is usually YYYY-MM-DD
+                const dateParts = rcpt.date.split('-');
+                if (dateParts.length < 2) continue;
+                
+                const year = dateParts[0];
+                const month = dateParts[1];
+                const folderName = `${year}年${month}月`;
+                // Add seconds to avoid filename conflicts if multiple on same day
+                const filename = `${year}${month}${dateParts[2]}_${rcpt.category}_${rcpt.amount}円_${rcpt.id}.jpg`;
+
+                // Get or create YYYY年MM月 folder
+                const monthDirHandle = await dirHandle.getDirectoryHandle(folderName, { create: true });
+
+                // Create the file
+                const imgHandle = await monthDirHandle.getFileHandle(filename, { create: true });
+                const imgWritable = await imgHandle.createWritable();
+
+                // Convert base64 to Blob
+                const response = await fetch(rcpt.image);
+                const imgBlob = await response.blob();
+
+                await imgWritable.write(imgBlob);
+                await imgWritable.close();
+            }
+
+            this.showToast('全てのデータと画像のバックアップが完了しました。');
+            
+        } catch (err) {
+            console.error('Backup Error:', err);
+            // If the user cancelled or the browser doesn't support the API, fallback to JSON download
+            if (err.name !== 'AbortError') {
+                this.fallbackExportBackup();
+            }
+        }
+    }
+
+    fallbackExportBackup() {
         const dataStr = JSON.stringify({ transactions: this.transactions });
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -1160,7 +1251,7 @@ class App {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        this.showToast('バックアップデータをダウンロードしました。');
+        this.showToast('画像一括保存に失敗したため、データ(JSON)のみダウンロードしました。', 'error');
     }
 
     importBackup(event) {

@@ -22,6 +22,16 @@
 </head>
 
 <body>
+    <!-- Full-screen Image Modal overlay -->
+    <div id="image-overlay" class="auth-overlay hidden" style="z-index: 2000; background: rgba(0,0,0,0.85);" onclick="if(event.target === this) this.classList.add('hidden')">
+        <div style="position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;">
+            <img id="fullscreen-img" src="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px;">
+            <button class="icon-btn" style="position: absolute; top: 20px; right: 20px; color: white; background: rgba(0,0,0,0.5);" onclick="document.getElementById('image-overlay').classList.add('hidden')">
+                <i class="ph ph-x" style="font-size: 1.5rem;"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Password Overlay -->
     <div id="auth-overlay" class="auth-overlay">
         <div class="auth-card">
@@ -88,39 +98,6 @@
             <header class="top-header">
                 <h1 id="page-title">ホーム</h1>
                 <div class="header-actions">
-                    <div style="position: relative;">
-                        <button class="icon-btn tooltip"
-                            onclick="document.getElementById('notif-dropdown').classList.toggle('hidden')">
-                            <i class="ph ph-bell"></i>
-                            <span class="badge" id="notif-badge">2</span>
-                        </button>
-                        <!-- Notif Dropdown -->
-                        <div id="notif-dropdown" class="notif-dropdown hidden">
-                            <div class="notif-header">
-                                <h4>通知 (<span id="notif-count">2</span>)</h4>
-                            </div>
-                            <ul class="notif-list" id="notif-list">
-                                <!-- JS will populate or we can mock here -->
-                                <li>
-                                    <i class="ph ph-receipt text-primary"></i>
-                                    <div>
-                                        <p>未登録のレシートが2件あります。</p>
-                                        <span class="notif-time">2時間前</span>
-                                    </div>
-                                </li>
-                                <li>
-                                    <i class="ph ph-info text-primary"></i>
-                                    <div>
-                                        <p>青色申告の準備はお早めに！決算・申告メニューからプレビューを確認できます。</p>
-                                        <span class="notif-time">1日前</span>
-                                    </div>
-                                </li>
-                            </ul>
-                            <div class="notif-footer" onclick="window.app.clearNotifs()">
-                                <span>すべて既読にする</span>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </header>
 
@@ -370,10 +347,14 @@
                     <div class="table-header">
                         <div class="search-box">
                             <i class="ph ph-magnifying-glass"></i>
-                            <input type="text" placeholder="取引を検索...">
+                            <input type="text" id="tx-search-input" placeholder="取引を検索..." oninput="window.app.renderTransactionsTable()">
                         </div>
                         <div class="filter-actions">
-                            <button class="btn btn-outline"><i class="ph ph-funnel"></i> 絞り込み</button>
+                            <select id="tx-filter-select" class="btn btn-outline" onchange="window.app.renderTransactionsTable()" style="appearance: auto; padding-right: 2rem;">
+                                <option value="all">すべて</option>
+                                <option value="income">収入のみ</option>
+                                <option value="expense">支出のみ</option>
+                            </select>
                             <button class="btn btn-outline" onclick="window.app.exportCSV()"><i
                                     class="ph ph-download-simple"></i> CSV出力 (Excel用)</button>
                         </div>
