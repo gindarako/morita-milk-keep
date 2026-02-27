@@ -17,8 +17,7 @@
     <!-- Firebase (Firestore Sync) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <!-- Tesseract.js for OCR -->
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <!-- Google Cloud Vision API (via fetch, no SDK needed) -->
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -254,6 +253,8 @@
                     <div class="upload-section">
                         <h2><i class="ph ph-camera"></i> レシートを撮影・アップロード</h2>
                         <p class="section-desc">写真から日付、金額、勘定科目をAIが自動で読み取ります。</p>
+
+
 
                         <div
                             style="margin-bottom: 1.5rem; background: var(--bg-color); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">

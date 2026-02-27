@@ -331,26 +331,146 @@ class App {
         const overlay = document.getElementById('processing-overlay');
         const overlayText = overlay.querySelector('p');
         overlay.classList.remove('hidden');
-        overlayText.textContent = 'AIが文字を読み取っています（10秒ほどかかります）...';
+        overlayText.textContent = 'Google AIが文字を読み取っています（数秒かかります）...';
+
+        // Google Cloud Vision API キー
+        const VISION_API_KEY = 'AIzaSyDv_utxIu8JNlintlXW9c_UCzQeR7rmZUg';
 
         try {
-            // Tesseract.js usage
-            const worker = await Tesseract.createWorker('jpn');
-            const ret = await worker.recognize(imageSrc);
-            const text = ret.data.text;
-            console.log("OCR Result:", text);
 
-            await worker.terminate();
+            // Base64データ（data:image/jpeg;base64,... の「,」以降）を取り出す
+            const base64Image = imageSrc.split(',')[1];
+            if (!base64Image) {
+                throw new Error('画像データの変換に失敗しました。');
+            }
 
-            this.processOCRText(text);
-            this.showToast('読み取りが完了しました！内容に不備がないか確認してください。');
+            const requestBody = {
+                requests: [{
+                    image: { content: base64Image },
+                    features: [{ type: 'TEXT_DETECTION', maxResults: 1 }],
+                    imageContext: { languageHints: ['ja', 'en'] }
+                }]
+            };
+
+            let response;
+            try {
+                response = await fetch(
+                    `https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    }
+                );
+            } catch (fetchErr) {
+                // ネットワーク切断・CORSなど
+                throw new Error('network_error');
+            }
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const status = response.status;
+                const errMsg = errData?.error?.message || '';
+                const errCode = errData?.error?.status || '';
+                console.error('Vision API Error:', status, errCode, errMsg);
+                throw new Error(`api_error:${status}:${errCode}:${errMsg}`);
+            }
+
+            const data = await response.json();
+            const text = data?.responses?.[0]?.fullTextAnnotation?.text || '';
+            console.log('Google Vision OCR Result:', text);
+
+            if (!text) {
+                this.showToast('文字が読み取れませんでした。写真をより鮮明にして再試行してください。', 'error');
+            } else {
+                this.processOCRText(text);
+                this.showToast('✅ 読み取りが完了しました！内容を確認してください。');
+            }
         } catch (e) {
-            console.error("OCR Error:", e);
-            this.showToast('読み取りに失敗しました。手動で入力してください。', 'error');
+            console.error('Google Vision OCR Error:', e);
+            overlay.classList.add('hidden');
+            this.handleOCRError(e.message);
+            return;
         } finally {
             overlay.classList.add('hidden');
         }
     }
+
+    handleOCRError(message) {
+        if (message === 'network_error') {
+            this.showErrorDialog(
+                '通信エラー',
+                'インターネットに接続されているか確認してください。\n\nまたはブラウザのセキュリティ設定でGoogle APIへの接続がブロックされている可能性があります。'
+            );
+            return;
+        }
+        if (message.startsWith('api_error:')) {
+            const parts = message.split(':');
+            const status = parts[1];
+            const code = parts[2];
+            const detail = parts.slice(3).join(':');
+
+            if (status === '400') {
+                this.showErrorDialog('リクエストエラー (400)',
+                    '画像が大きすぎるか、形式が対応していない可能性があります。\n\n別の画像でお試しください。\n\n詳細: ' + detail);
+            } else if (status === '403') {
+                if (detail.includes('has not been used') || detail.includes('disabled')) {
+                    this.showErrorDialog('Cloud Vision APIが有効になっていません (403)',
+                        '以下の手順でAPIを有効化してください：\n\n1. Google Cloud Console (console.cloud.google.com) を開く\n2. 左メニュー「APIとサービス」→「ライブラリ」\n3. 「Cloud Vision API」を検索\n4. 「有効にする」ボタンをクリック\n\n有効化後、数分待ってから再試行してください。');
+                } else if (detail.includes('API key not valid') || detail.includes('invalid')) {
+                    this.showErrorDialog('APIキーが無効です (403)',
+                        'APIキーが正しくありません。\n\n・コピー時に文字が欠けていないか確認\n・APIキーを削除して再入力してください\n\n詳細: ' + detail);
+                } else {
+                    this.showErrorDialog('アクセス拒否 (403)',
+                        'APIキーの制限設定を確認してください。\n\nGoogle Cloud Consoleで「APIキーの制限」が設定されている場合、「制限なし」または本アプリのドメインを許可してください。\n\n詳細: ' + detail);
+                }
+            } else if (status === '429') {
+                this.showErrorDialog('無料枠の上限に達しました (429)',
+                    '今月のAPI利用回数が上限に達しました。\n\nGoogle Cloud Consoleで利用状況を確認してください。');
+            } else {
+                this.showErrorDialog(`APIエラー (${status})`,
+                    'エラー詳細をコピーしてご確認ください：\n\n' + detail);
+            }
+            return;
+        }
+        // その他の予期せぬエラー
+        this.showErrorDialog('予期せぬエラー', message);
+    }
+
+    showErrorDialog(title, body) {
+        // 既存のダイアログがあれば削除
+        const existing = document.getElementById('ocr-error-dialog');
+        if (existing) existing.remove();
+
+        const dialog = document.createElement('div');
+        dialog.id = 'ocr-error-dialog';
+        dialog.style.cssText = `
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999;
+            display: flex; align-items: center; justify-content: center; padding: 1rem;
+        `;
+        dialog.innerHTML = `
+            <div style="background:#fff; border-radius:16px; padding:2rem; max-width:480px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+                    <i class="ph ph-warning-circle" style="font-size:1.5rem; color:#dc2626;"></i>
+                    <h3 style="margin:0; color:#dc2626; font-size:1rem;">${title}</h3>
+                </div>
+                <p style="white-space:pre-line; font-size:0.875rem; color:#374151; line-height:1.7; margin-bottom:1.5rem;">${body}</p>
+                <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+                    <button onclick="document.getElementById('ocr-error-dialog').remove()"
+                        style="padding:0.5rem 1.25rem; border-radius:8px; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:0.875rem;">
+                        閉じる
+                    </button>
+                    <button onclick="window.open('https://console.cloud.google.com/apis/library/vision.googleapis.com','_blank'); document.getElementById('ocr-error-dialog').remove()"
+                        style="padding:0.5rem 1.25rem; border-radius:8px; border:none; background:#2563eb; color:#fff; cursor:pointer; font-size:0.875rem;">
+                        Cloud Consoleを開く
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(dialog);
+        dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.remove(); });
+    }
+
 
     processOCRText(text) {
         const dateInput = document.getElementById('t-date');
